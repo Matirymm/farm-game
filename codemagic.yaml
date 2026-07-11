@@ -5,12 +5,6 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       flutter: stable
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
     scripts:
       - name: Generate Android scaffolding (no local tooling needed)
         script: |
