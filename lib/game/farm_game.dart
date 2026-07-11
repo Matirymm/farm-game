@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart:async' as dart_async;
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +8,7 @@ import 'animal.dart';
 
 class FarmGame extends FlameGame {
   int? pendingPlotIndex; // القطعة المنتظرة لاختيار البذور
-  Timer? _tick;
+  dart_async.Timer? _tick;
 
   @override
   Color backgroundColor() => const Color(0xFF6AB140);
@@ -39,7 +39,7 @@ class FarmGame extends FlameGame {
     }
 
     // نبض كل ثانية لحالة الحيوانات
-    _tick = Timer.periodic(
+    _tick = dart_async.Timer.periodic(
         const Duration(seconds: 1), (_) => GameState.I.tick());
 
     // عند شراء حيوان جديد من HUD نضيفه للخريطة
