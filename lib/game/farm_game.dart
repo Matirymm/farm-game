@@ -1,8 +1,8 @@
 import 'dart:async' as dart_async;
 import 'dart:math';
 import 'package:flame/components.dart';
+import 'package:flame/events.dart';
 import 'package:flame/game.dart';
-import 'package:flame/input.dart';
 import 'package:flutter/material.dart';
 import '../state.dart';
 import 'scenery.dart';
@@ -10,7 +10,7 @@ import 'plot.dart';
 import 'animal.dart';
 
 /// عالم أكبر من الشاشة + كاميرا تتحرك بسحب الإصبع (مثل Hay Day)
-class FarmGame extends FlameGame with PanDetector {
+class FarmGame extends FlameGame {
   static const double worldW = 1600, worldH = 1000;
 
   int? pendingPlotIndex;
@@ -50,6 +50,7 @@ class FarmGame extends FlameGame with PanDetector {
     _fitCamera();
     camera.viewfinder.position = Vector2(worldW * .58, worldH * .62);
     _clampCamera();
+    camera.viewport.add(PanCatcher());
     camera.viewport.add(DayNightTint());
 
     _tick = dart_async.Timer.periodic(
@@ -59,11 +60,9 @@ class FarmGame extends FlameGame with PanDetector {
   }
 
   // ---------- الكاميرا: سحب + حدود ----------
-  @override
-  void onPanUpdate(DragUpdateInfo info) {
+  void panBy(Vector2 screenDelta) {
     if (!_ready) return;
-    camera.viewfinder.position -=
-        info.delta.global / camera.viewfinder.zoom;
+    camera.viewfinder.position -= screenDelta / camera.viewfinder.zoom;
     _clampCamera();
   }
 
@@ -122,5 +121,24 @@ class FarmGame extends FlameGame with PanDetector {
     _tick?.cancel();
     GameState.I.removeListener(_syncAnimals);
     super.onRemove();
+  }
+}
+
+/// طبقة شفافة بحجم الشاشة تلتقط سحب الإصبع وتحرّك الكاميرا.
+/// اللمسات العادية (Tap) تمر للمحاصيل والحيوانات دون تأثر.
+class PanCatcher extends PositionComponent
+    with DragCallbacks, HasGameReference<FarmGame> {
+  PanCatcher() {
+    priority = 90;
+  }
+
+  @override
+  void update(double dt) {
+    size = game.size;
+  }
+
+  @override
+  void onDragUpdate(DragUpdateEvent event) {
+    game.panBy(event.localDelta);
   }
 }
