@@ -65,7 +65,7 @@ class GameState extends ChangeNotifier {
       gems += g;
       final unlock = unlockMessages[level];
       levelUpMessage =
-          'المستوى $level! +$g 💎${unlock != null ? ' — فتح: $unlock' : ''}';
+          'المستوى $level! مكافأة $g ماس${unlock != null ? ' — فتح: $unlock' : ''}';
     }
     _saveAndNotify();
   }

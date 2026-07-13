@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../economy.dart';
 import '../state.dart';
 import '../game/farm_game.dart';
+import 'icons.dart';
 
 class Hud extends StatelessWidget {
   final FarmGame game;
@@ -13,20 +14,19 @@ class Hud extends StatelessWidget {
       animation: GameState.I,
       builder: (context, _) {
         final gs = GameState.I;
-        // رسالة صعود المستوى
         if (gs.levelUpMessage != null) {
           final msg = gs.levelUpMessage!;
           gs.levelUpMessage = null;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('🎉 $msg', textAlign: TextAlign.center),
+                content: Text(msg, textAlign: TextAlign.center),
+                backgroundColor: const Color(0xFF3C2812),
                 duration: const Duration(seconds: 3)));
           });
         }
         return SafeArea(
           child: Column(
             children: [
-              // الشريط العلوي
               Container(
                 margin: const EdgeInsets.all(8),
                 padding:
@@ -37,11 +37,14 @@ class Hud extends StatelessWidget {
                 ),
                 child: Column(children: [
                   Row(children: [
-                    _pill('🪙 ${gs.coins}'),
+                    _pill(Icons.monetization_on, const Color(0xFFF6A92C),
+                        '${gs.coins}'),
                     const SizedBox(width: 6),
-                    _pill('💎 ${gs.gems}'),
+                    _pill(Icons.diamond, const Color(0xFF8E4CE0),
+                        '${gs.gems}'),
                     const SizedBox(width: 6),
-                    _pill('📦 ${gs.invTotal}/${gs.storageCap}'),
+                    _pill(Icons.inventory_2, const Color(0xFF7A5C3A),
+                        '${gs.invTotal}/${gs.storageCap}'),
                   ]),
                   const SizedBox(height: 6),
                   Row(children: [
@@ -69,14 +72,14 @@ class Hud extends StatelessWidget {
                 ]),
               ),
               const Spacer(),
-              // زر السوق
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFF6A92C)),
+                      backgroundColor: const Color(0xFFF6A92C),
+                      foregroundColor: Colors.white),
                   onPressed: () => _openMarket(context),
-                  icon: const Text('🏪', style: TextStyle(fontSize: 20)),
+                  icon: const Icon(Icons.storefront),
                   label: const Text('السوق والحظيرة',
                       style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
@@ -88,16 +91,25 @@ class Hud extends StatelessWidget {
     );
   }
 
-  Widget _pill(String t) => Expanded(
+  Widget _pill(IconData ic, Color color, String t) => Expanded(
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 3),
+          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
           decoration: BoxDecoration(
               color: const Color(0xFFFDF6E3),
               borderRadius: BorderRadius.circular(99)),
-          child: Text(t,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 13)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(ic, size: 16, color: color),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(t,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+            ],
+          ),
         ),
       );
 
@@ -111,61 +123,63 @@ class Hud extends StatelessWidget {
         animation: GameState.I,
         builder: (context, _) {
           final gs = GameState.I;
-          final items =
-              gs.inv.entries.where((e) => e.value > 0).toList();
+          final items = gs.inv.entries.where((e) => e.value > 0).toList();
           return Directionality(
             textDirection: TextDirection.rtl,
             child: ListView(
               padding: const EdgeInsets.all(14),
               children: [
-                const Text('📦 بيع المخزون',
+                const Text('بيع المخزون',
                     style:
                         TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 if (items.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(12),
-                    child: Text('المخزون فارغ — احصد شيئاً 🌾'),
+                    child: Text('المخزون فارغ — احصد شيئاً أولاً'),
                   ),
                 ...items.map((e) => ListTile(
-                      leading: Text(emojiOf(e.key),
-                          style: const TextStyle(fontSize: 26)),
+                      leading: ItemIcon(e.key),
                       title: Text('${nameOf(e.key)} ×${e.value}'),
                       trailing: FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFF6A92C)),
                         onPressed: () => gs.sellAll(e.key),
-                        child:
-                            Text('بيع 🪙${sellPriceOf(e.key) * e.value}'),
+                        child: Text('بيع ${sellPriceOf(e.key) * e.value}'),
                       ),
                     )),
                 const Divider(),
-                const Text('🐄 شراء حيوانات',
+                const Text('شراء حيوانات',
                     style:
                         TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ...animals.values.map((a) {
                   final locked = gs.level < a.unlockLevel;
                   return ListTile(
-                    leading:
-                        Text(a.emoji, style: const TextStyle(fontSize: 26)),
+                    leading: AnimalIcon(a.id),
                     title: Text(a.nameAr +
                         (locked ? ' (مستوى ${a.unlockLevel})' : '')),
                     subtitle: Text(
-                        'علف: ${a.feed.entries.map((e) => '${crops[e.key]!.emoji}×${e.value}').join(' ')} → ${products[a.productId]!.emoji}'),
+                        'علف: ${a.feed.entries.map((e) => '${e.value} ${crops[e.key]!.nameAr}').join(' + ')} → ${products[a.productId]!.nameAr}'),
                     trailing: FilledButton(
+                      style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF5FA63A)),
                       onPressed: locked || gs.coins < a.price
                           ? null
                           : () => gs.buyAnimal(a.id),
-                      child: Text('🪙${a.price}'),
+                      child: Text('${a.price} ذهب'),
                     ),
                   );
                 }),
                 const Divider(),
                 ListTile(
-                  leading: const Text('🏗️', style: TextStyle(fontSize: 26)),
-                  title: const Text('ترقية المستودع (+25)'),
+                  leading: const Icon(Icons.warehouse,
+                      size: 30, color: Color(0xFF7A5C3A)),
+                  title: const Text('ترقية المستودع (+25 سعة)'),
                   trailing: FilledButton(
                     onPressed: gs.coins < storageUpgradeCost(gs.storageUps)
                         ? null
                         : () => gs.upgradeStorage(),
-                    child: Text('🪙${storageUpgradeCost(gs.storageUps)}'),
+                    child:
+                        Text('${storageUpgradeCost(gs.storageUps)} ذهب'),
                   ),
                 ),
               ],

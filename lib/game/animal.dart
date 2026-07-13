@@ -2,110 +2,171 @@ import 'dart:math';
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
+import '../art/animal_art.dart';
 import '../economy.dart';
 import '../state.dart';
+import 'effects.dart';
 import 'farm_game.dart';
 
-/// حيوان يتجول في منطقة الرعي (بين المباني والحقول)
+/// حدود مرعى الحيوانات داخل السياج
+const _penX1 = 210.0, _penX2 = 640.0, _penY1 = 520.0, _penY2 = 780.0;
+
 class AnimalComponent extends PositionComponent
     with TapCallbacks, HasGameReference<FarmGame> {
   final AnimalData data;
-  late TextComponent _body;
-  late TextComponent _bubble;
   final _rng = Random();
 
   Vector2 _target = Vector2.zero();
-  bool _walking = false;
-  double _idleTimer = 1.0;
-  double _t = 0;
-  static const _speed = 28.0; // بكسل/ثانية
+  bool _walking = false, _faceLeft = false;
+  double _idle = 1.0, _phase = 0, _t = 0;
+  static const _speed = 34.0;
 
   AnimalComponent({required this.data});
 
   AnimalSpec get spec => animals[data.type]!;
+  Vector2 get _head => position + Vector2(size.x / 2, 0);
 
   @override
   Future<void> onLoad() async {
-    size = Vector2(48, 48);
+    size = data.type == 'cow' ? Vector2(78, 62) : Vector2(58, 50);
     anchor = Anchor.center;
-    position = _randomPenPoint();
+    position = Vector2(_penX1 + _rng.nextDouble() * (_penX2 - _penX1),
+        _penY1 + _rng.nextDouble() * (_penY2 - _penY1));
     _target = position.clone();
-
-    _body = TextComponent(
-      text: spec.emoji,
-      anchor: Anchor.center,
-      position: size / 2,
-      textRenderer: TextPaint(style: const TextStyle(fontSize: 32)),
-    );
-    _bubble = TextComponent(
-      text: '',
-      anchor: Anchor.bottomCenter,
-      position: Vector2(size.x / 2, -2),
-      textRenderer: TextPaint(style: const TextStyle(fontSize: 15)),
-    );
-    addAll([_body, _bubble]);
-  }
-
-  Vector2 _randomPenPoint() {
-    final s = game.size;
-    return Vector2(
-      s.x * (0.10 + _rng.nextDouble() * 0.75),
-      s.y * (0.26 + _rng.nextDouble() * 0.10),
-    );
+    priority = 10;
   }
 
   @override
   void update(double dt) {
     _t += dt;
-    // حالة الإنتاج تنتهي؟ (state.tick يتكفل بالتحويل، هنا العرض فقط)
-    _bubble.text = switch (data.state) {
-      'hungry' => '🍽️',
-      'producing' => '⏳',
-      _ => '${products[spec.productId]!.emoji}❗',
-    };
-
-    // سلوك التجول (يتوقف عن التجول عندما يكون المنتج جاهزاً)
     if (_walking) {
+      _phase += dt * 10;
       final dir = _target - position;
-      final dist = dir.length;
-      if (dist < 3) {
+      if (dir.length < 3) {
         _walking = false;
-        _idleTimer = 1.5 + _rng.nextDouble() * 3.5;
+        _idle = 1.5 + _rng.nextDouble() * 3.5;
       } else {
         position += dir.normalized() * _speed * dt;
-        // حركة المشي المتمايلة
-        _body.angle = 0.10 * sin(_t * 9);
-        _body.position.y = size.y / 2 - 3 * sin(_t * 9).abs();
       }
     } else {
-      _body.angle = 0;
-      _body.position.y = size.y / 2;
-      // تنفّس خفيف أثناء الوقوف
-      _body.scale = Vector2(1, 1 - 0.04 * (0.5 + 0.5 * sin(_t * 2.6)));
-      _idleTimer -= dt;
-      if (_idleTimer <= 0 && data.state != 'ready') {
-        _target = _randomPenPoint();
-        // انقلاب الاتجاه حسب جهة المشي
-        _body.scale = Vector2(_target.x < position.x ? -1 : 1, 1);
+      _idle -= dt;
+      if (_idle <= 0 && data.state != 'ready') {
+        _target = Vector2(_penX1 + _rng.nextDouble() * (_penX2 - _penX1),
+            _penY1 + _rng.nextDouble() * (_penY2 - _penY1));
+        _faceLeft = _target.x < position.x;
         _walking = true;
       }
     }
   }
 
   @override
-  void onTapDown(TapDownEvent event) {
+  void render(Canvas c) {
+    // ظل أرضي
+    c.drawOval(
+        Rect.fromCenter(
+            center: Offset(size.x / 2, size.y - 2),
+            width: size.x * .68,
+            height: 9),
+        Paint()..color = const Color(0x33203010));
+    // الجسم (انعكاس حسب الاتجاه + وثب المشي/تنفس الوقوف)
+    c.save();
+    final bob = _walking ? sin(_phase) * 1.8 : sin(_t * 2.6) * 0.8;
+    c.translate(0, bob);
+    if (_faceLeft) {
+      c.translate(size.x, 0);
+      c.scale(-1, 1);
+    }
+    AnimalArt.paint(
+        c, data.type, Size(size.x, size.y - 4), _phase, _walking);
+    c.restore();
+    // فقاعة الحالة
+    _bubble(c);
+  }
+
+  void _bubble(Canvas c) {
+    final bw = 30.0, bh = 26.0;
+    final bx = size.x / 2 - bw / 2, by = -bh - 8.0;
+    final float = sin(_t * 3) * 2;
+    c.save();
+    c.translate(0, float);
+    final r = RRect.fromRectAndRadius(
+        Rect.fromLTWH(bx, by, bw, bh), const Radius.circular(8));
+    c.drawRRect(r, Paint()..color = Colors.white);
+    c.drawRRect(
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6
+          ..color = const Color(0xFFB8AD98));
+    final tip = Path()
+      ..moveTo(size.x / 2 - 5, by + bh)
+      ..lineTo(size.x / 2, by + bh + 6)
+      ..lineTo(size.x / 2 + 5, by + bh)
+      ..close();
+    c.drawPath(tip, Paint()..color = Colors.white);
+
+    c.translate(bx + 4, by + 4);
+    final inner = Size(bw - 8, bh - 8);
+    switch (data.state) {
+      case 'hungry':
+        AnimalArt.paintFeedIcon(c, inner);
+      case 'producing':
+        final total = spec.produceSeconds * 1000;
+        final left = data.endMs - DateTime.now().millisecondsSinceEpoch;
+        AnimalArt.paintProgress(
+            c, inner, (1 - left / total).clamp(0.0, 1.0));
+      default:
+        AnimalArt.paintProduct(c, spec.productId, inner);
+    }
+    c.restore();
+  }
+
+  // ---------- اللمس ----------
+  @override
+  void onTapUp(TapUpEvent event) {
     final gs = GameState.I;
     switch (data.state) {
       case 'hungry':
-        gs.feedAnimal(data);
-      case 'producing':
-        if (gs.gems > 0) {
-          gs.gems--;
-          data.endMs = DateTime.now().millisecondsSinceEpoch;
-          gs.tick();
+        if (gs.feedAnimal(data)) {
+          game.world.add(Burst(_head, const Color(0xFF8FD45E)));
+        } else {
+          final need = spec.feed.entries
+              .map((e) => '${e.value} ${crops[e.key]!.nameAr}')
+              .join(' + ');
+          game.world.add(RiseText(_head, 'يلزم علف: $need',
+              color: const Color(0xFFFFB4A8)));
         }
+      case 'producing':
+        final leftS =
+            ((data.endMs - DateTime.now().millisecondsSinceEpoch) / 1000)
+                .ceil();
+        game.world
+            .add(RiseText(_head, 'باقٍ $leftS ث — مطولاً للتسريع'));
       case 'ready':
-        gs.collectAnimal(data);
+        if (gs.collectAnimal(data)) {
+          game.world.add(Burst(_head, Colors.white));
+          game.world.add(RiseText(
+              _head, '+1 ${products[spec.productId]!.nameAr}',
+              color: const Color(0xFFFFE9A8)));
+        } else {
+          game.world.add(RiseText(_head, 'المستودع ممتلئ',
+              color: const Color(0xFFFFB4A8)));
+        }
     }
+  }
+
+  @override
+  void onLongTapDown(TapDownEvent event) {
+    if (data.state != 'producing') return;
+    final gs = GameState.I;
+    if (gs.gems < 1) {
+      game.world
+          .add(RiseText(_head, 'لا يوجد ماس', color: const Color(0xFFFFB4A8)));
+      return;
+    }
+    gs.gems--;
+    data.endMs = DateTime.now().millisecondsSinceEpoch;
+    gs.tick();
+    game.world.add(Burst(_head, const Color(0xFFB07DF0)));
   }
 }

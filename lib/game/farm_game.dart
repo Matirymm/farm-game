@@ -1,81 +1,120 @@
 import 'dart:async' as dart_async;
+import 'dart:math';
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
+import 'package:flame/input.dart';
 import 'package:flutter/material.dart';
 import '../state.dart';
+import 'scenery.dart';
 import 'plot.dart';
 import 'animal.dart';
 
-class FarmGame extends FlameGame {
-  int? pendingPlotIndex; // القطعة المنتظرة لاختيار البذور
+/// عالم أكبر من الشاشة + كاميرا تتحرك بسحب الإصبع (مثل Hay Day)
+class FarmGame extends FlameGame with PanDetector {
+  static const double worldW = 1600, worldH = 1000;
+
+  int? pendingPlotIndex;
   dart_async.Timer? _tick;
+  double clock = 0;
+  bool _ready = false;
+
+  /// دورة يوم/ليل مدتها 4 دقائق (0 = ظهر، 0.5 = منتصف الليل)
+  double get dayPhase => (clock % 240) / 240;
 
   @override
-  Color backgroundColor() => const Color(0xFF6AB140);
+  Color backgroundColor() => const Color(0xFF5FA63A);
 
   @override
   Future<void> onLoad() async {
-    // السماء
-    add(RectangleComponent(
-      size: Vector2(size.x, size.y * 0.20),
-      paint: Paint()..color = const Color(0xFF9EDCF2),
-      priority: -10,
-    ));
-    // الشمس والمباني والأشجار (نصوص إيموجي — تُستبدل لاحقاً بـ Sprites)
-    _emoji('☀️', Vector2(size.x * 0.12, size.y * 0.07), 34);
-    _emoji('🏡', Vector2(size.x * 0.82, size.y * 0.14), 44);
-    _emoji('🏚️', Vector2(size.x * 0.50, size.y * 0.14), 44);
-    _emoji('🌳', Vector2(size.x * 0.22, size.y * 0.16), 36);
-    _emoji('🌲', Vector2(size.x * 0.65, size.y * 0.17), 30);
+    world.add(GroundLayer());
+    world.add(SunComponent(position: Vector2(180, 110)));
+    for (var i = 0; i < 4; i++) {
+      world.add(CloudComponent(seed: i));
+    }
+    world.add(BarnComponent(position: Vector2(360, 250)));
+    world.add(HouseComponent(position: Vector2(1300, 245)));
+    world.add(TreeComponent(position: Vector2(120, 460), scale2: 1.0));
+    world.add(TreeComponent(position: Vector2(1070, 470), scale2: .85));
+    world.add(TreeComponent(position: Vector2(1510, 500), scale2: 1.1));
+    world.add(TreeComponent(position: Vector2(760, 440), scale2: .7));
 
-    // القطع الزراعية (شبكة 3×3 في النصف السفلي)
     final gs = GameState.I;
     for (var i = 0; i < gs.plots.length; i++) {
-      add(PlotComponent(index: i, position: plotPosition(i)));
+      world.add(PlotComponent(index: i, position: plotPosition(i)));
     }
-    // الحيوانات المحفوظة
     for (final a in gs.animalsOwned) {
-      add(AnimalComponent(data: a));
+      world.add(AnimalComponent(data: a));
     }
 
-    // نبض كل ثانية لحالة الحيوانات
+    camera.viewfinder.anchor = Anchor.center;
+    _fitCamera();
+    camera.viewfinder.position = Vector2(worldW * .58, worldH * .62);
+    _clampCamera();
+    camera.viewport.add(DayNightTint());
+
     _tick = dart_async.Timer.periodic(
         const Duration(seconds: 1), (_) => GameState.I.tick());
-
-    // عند شراء حيوان جديد من HUD نضيفه للخريطة
     GameState.I.addListener(_syncAnimals);
+    _ready = true;
   }
 
+  // ---------- الكاميرا: سحب + حدود ----------
+  @override
+  void onPanUpdate(DragUpdateInfo info) {
+    if (!_ready) return;
+    camera.viewfinder.position -=
+        info.delta.global / camera.viewfinder.zoom;
+    _clampCamera();
+  }
+
+  void _fitCamera() {
+    camera.viewfinder.zoom = max(size.y / worldH, size.x / worldW);
+  }
+
+  void _clampCamera() {
+    final z = camera.viewfinder.zoom;
+    final halfW = size.x / z / 2, halfH = size.y / z / 2;
+    final p = camera.viewfinder.position;
+    camera.viewfinder.position = Vector2(
+      p.x.clamp(halfW, worldW - halfW).toDouble(),
+      p.y.clamp(halfH, worldH - halfH).toDouble(),
+    );
+  }
+
+  @override
+  void onGameResize(Vector2 s) {
+    super.onGameResize(s);
+    if (_ready) {
+      _fitCamera();
+      _clampCamera();
+    }
+  }
+
+  @override
+  void update(double dt) {
+    super.update(dt);
+    clock += dt;
+  }
+
+  // ---------- منطق اللعبة ----------
   void _syncAnimals() {
     final existing =
-        children.whereType<AnimalComponent>().map((c) => c.data).toSet();
+        world.children.whereType<AnimalComponent>().map((c) => c.data).toSet();
     for (final a in GameState.I.animalsOwned) {
-      if (!existing.contains(a)) add(AnimalComponent(data: a));
+      if (!existing.contains(a)) world.add(AnimalComponent(data: a));
     }
   }
 
   Vector2 plotPosition(int i) {
     final col = i % 3, row = i ~/ 3;
-    final w = size.x * 0.26;
-    final x0 = size.x * 0.08, y0 = size.y * 0.42;
-    return Vector2(x0 + col * (w + size.x * 0.05),
-        y0 + row * (size.y * 0.17));
+    return Vector2(830 + col * 205.0, 545 + row * 148.0);
   }
 
-  Vector2 get plotSize => Vector2(size.x * 0.26, size.y * 0.12);
+  Vector2 get plotSize => Vector2(170, 118);
 
   void openSeedMenu(int plotIndex) {
     pendingPlotIndex = plotIndex;
     overlays.add('seeds');
-  }
-
-  void _emoji(String e, Vector2 pos, double fontSize) {
-    add(TextComponent(
-      text: e,
-      position: pos,
-      anchor: Anchor.center,
-      textRenderer: TextPaint(style: TextStyle(fontSize: fontSize)),
-    ));
   }
 
   @override
