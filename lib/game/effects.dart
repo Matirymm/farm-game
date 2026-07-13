@@ -6,18 +6,19 @@ import 'package:flutter/material.dart';
 class Burst extends PositionComponent {
   final Color color;
   final List<_P> _ps;
-  Burst(Vector2 pos, this.color)
-      : _ps = () {
-          final r = Random();
-          return List.generate(
-              10,
-              (_) => _P(
-                  Vector2((r.nextDouble() - .5) * 190,
-                      -70 - r.nextDouble() * 130),
-                  .55 + r.nextDouble() * .35));
-        }() {
+
+  Burst(Vector2 pos, this.color) : _ps = _make() {
     position = pos;
     priority = 50;
+  }
+
+  static List<_P> _make() {
+    final r = Random();
+    return List.generate(
+        10,
+        (_) => _P(
+            Vector2((r.nextDouble() - .5) * 190, -70 - r.nextDouble() * 130),
+            .55 + r.nextDouble() * .35));
   }
 
   @override
