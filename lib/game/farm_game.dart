@@ -70,13 +70,19 @@ class FarmGame extends FlameGame {
     camera.viewfinder.zoom = max(size.y / worldH, size.x / worldW);
   }
 
+  /// clamp آمن ضد أخطاء الفاصلة العائمة (الحدان متقاربان أو متعاكسان)
+  double _safeClamp(double v, double lo, double hi) {
+    if (lo >= hi) return (lo + hi) / 2;
+    return v.clamp(lo, hi).toDouble();
+  }
+
   void _clampCamera() {
     final z = camera.viewfinder.zoom;
     final halfW = size.x / z / 2, halfH = size.y / z / 2;
     final p = camera.viewfinder.position;
     camera.viewfinder.position = Vector2(
-      p.x.clamp(halfW, worldW - halfW).toDouble(),
-      p.y.clamp(halfH, worldH - halfH).toDouble(),
+      _safeClamp(p.x, halfW, worldW - halfW),
+      _safeClamp(p.y, halfH, worldH - halfH),
     );
   }
 
